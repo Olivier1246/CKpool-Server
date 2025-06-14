@@ -1,10 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 )
@@ -59,8 +60,18 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Votre code HTML template ici...
-	HTMLTemplate(w, data)
+	// Parse et exécute le template HTML
+	tmpl, err := template.New("dashboard").Parse(HTMLTemplate)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Erreur lors du parsing du template: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Erreur lors de l'exécution du template: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleAPIData(w http.ResponseWriter, r *http.Request) {
@@ -72,5 +83,8 @@ func handleAPIData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	// Votre code JSON response ici...
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, fmt.Sprintf("Erreur lors de l'encodage JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
