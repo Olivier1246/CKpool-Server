@@ -458,8 +458,24 @@ func HTMLTemplate(w http.ResponseWriter, data LogData) {
                 default: hashrateField = 'hashrate1hr';
             }
             
+            // Filter data by time window
+            const now = new Date();
+            let windowMs;
+            switch(hashType) {
+                case '1m': windowMs = 2 * 60 * 60 * 1000; break; // 2 hours
+                case '5m': windowMs = 6 * 60 * 60 * 1000; break; // 6 hours
+                case '1h': windowMs = 12 * 60 * 60 * 1000; break; // 12 hours
+                case '1d': windowMs = 30 * 24 * 60 * 60 * 1000; break; // 30 days
+                case '7d': windowMs = 6 * 30 * 24 * 60 * 60 * 1000; break; // 6 months approx
+                default: windowMs = 12 * 60 * 60 * 1000;
+            }
+            const filteredByTime = filteredData.filter(item => {
+                const date = new Date(item.timestamp);
+                return (now - date) <= windowMs;
+            });
+
             return {
-                labels: filteredData.map(item => {
+                labels: filteredByTime.map(item => {
                     const date = new Date(item.timestamp);
                     if (hashType === '1d' || hashType === '7d') {
                         return date.toLocaleDateString();
@@ -467,9 +483,8 @@ func HTMLTemplate(w http.ResponseWriter, data LogData) {
                         return date.toLocaleTimeString();
                     }
                 }).reverse(),
-                values: filteredData.map(item => parseHashrate(item[hashrateField])).reverse()
+                values: filteredByTime.map(item => parseHashrate(item[hashrateField])).reverse()
             };
-        }
 
         // Fonction pour basculer l'affichage du hashrate utilisateur
         function toggleHashrate(hashType, button) {
