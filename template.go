@@ -1,7 +1,13 @@
 package main
 
-// HTMLTemplate contient le template HTML complet pour le dashboard
-const HTMLTemplate = `
+import (
+	"html/template"
+	"net/http"
+)
+
+// HTMLTemplate génère et affiche le template HTML
+func HTMLTemplate(w http.ResponseWriter, data LogData) {
+	tmpl := `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -125,6 +131,30 @@ const HTMLTemplate = `
         .tab-content.active {
             display: block;
         }
+        .chart-controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .hash-button {
+            margin: 5px;
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .hash-button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .hash-button:hover {
+            background: #e9ecef;
+        }
+        .hash-button.active:hover {
+            background: #0056b3;
+        }
     </style>
 </head>
 <body>
@@ -161,12 +191,26 @@ const HTMLTemplate = `
         <div id="charts" class="tab-content active">
             <div class="section">
                 <h2>Graphiques Hashrate Utilisateur</h2>
+                <div class="chart-controls">
+                    <button class="hash-button" onclick="toggleHashrate('1m', this)">Hash 1m (2h)</button>
+                    <button class="hash-button" onclick="toggleHashrate('5m', this)">Hash 5m (6h)</button>
+                    <button class="hash-button active" onclick="toggleHashrate('1h', this)">Hash 1h (12h)</button>
+                    <button class="hash-button" onclick="toggleHashrate('1d', this)">Hash 1d (30j)</button>
+                    <button class="hash-button" onclick="toggleHashrate('7d', this)">Hash 7d (6m)</button>
+                </div>
                 <div style="margin-bottom: 20px;">
                     <canvas id="userHashrateChart" width="400" height="200"></canvas>
                 </div>
             </div>
             <div class="section">
                 <h2>Graphiques Hashrate Pool</h2>
+                <div class="chart-controls">
+                    <button class="hash-button" onclick="togglePoolHashrate('1m', this)">Hash 1m (2h)</button>
+                    <button class="hash-button" onclick="togglePoolHashrate('5m', this)">Hash 5m (6h)</button>
+                    <button class="hash-button active" onclick="togglePoolHashrate('1h', this)">Hash 1h (12h)</button>
+                    <button class="hash-button" onclick="togglePoolHashrate('1d', this)">Hash 1d (30j)</button>
+                    <button class="hash-button" onclick="togglePoolHashrate('7d', this)">Hash 7d (6m)</button>
+                </div>
                 <div style="margin-bottom: 20px;">
                     <canvas id="poolHashrateChart" width="400" height="200"></canvas>
                 </div>
@@ -344,6 +388,11 @@ const HTMLTemplate = `
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script>
+        let userChart = null;
+        let poolChart = null;
+        let currentUserHashType = '1h';
+        let currentPoolHashType = '1h';
+
         function showTab(tabName) {
             // Cacher tous les contenus
             const contents = document.querySelectorAll('.tab-content');
@@ -380,158 +429,105 @@ const HTMLTemplate = `
             return value.toString();
         }
 
-        // Initialisation des graphiques
-        function initCharts() {
-            const userData = {{.Users}};
-            const poolData = {{.Pool}};
+        // Fonction pour calculer le nombre de points de données basé sur le type de hash
+        function getDataPointsCount(hashType) {
+            switch(hashType) {
+                case '1m': return 120; // 2 heures (120 minutes)
+                case '5m': return 72;  // 6 heures (72 * 5 minutes)
+                case '1h': return 12;  // 12 heures
+                case '1d': return 30;  // 30 jours
+                case '7d': return 26;  // 6 mois (26 semaines)
+                default: return 12;
+            }
+        }
 
-            // Préparation des données utilisateur
-            const userLabels = userData.slice(0, 20).map(item => item.timestamp.split(' ')[1]).reverse();
-            const userHashrate1m = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1m)).reverse();
-            const userHashrate5m = userData.slice(0, 20).map(item => parseHashrate(item.hashrate5m)).reverse();
-            const userHashrate1h = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1hr)).reverse();
-            const userHashrate1d = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1d)).reverse();
-            const userHashrate7d = userData.slice(0, 20).map(item => parseHashrate(item.hashrate7d)).reverse();
-
-            // Graphique utilisateur
-            const userCtx = document.getElementById('userHashrateChart').getContext('2d');
-            new Chart(userCtx, {
-                type: 'line',
-                data: {
-                    labels: userLabels,
-                    datasets: [
-                        {
-                            label: 'Hash 1m',
-                            data: userHashrate1m,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 5m',
-                            data: userHashrate5m,
-                            borderColor: 'rgb(54, 162, 235)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1h',
-                            data: userHashrate1h,
-                            borderColor: 'rgb(255, 205, 86)',
-                            backgroundColor: 'rgba(255, 205, 86, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1d',
-                            data: userHashrate1d,
-                            borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 7d',
-                            data: userHashrate7d,
-                            borderColor: 'rgb(153, 102, 255)',
-                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                            tension: 0.1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Évolution du Hashrate Utilisateur'
-                        },
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    },
-                    scales: {
-                        x: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: 'Temps'
-                            }
-                        },
-                        y: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: 'Hashrate (H/s)'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return formatHashrate(value);
-                                }
-                            }
-                        }
+        // Fonction pour obtenir les données de hashrate selon le type
+        function getHashrateData(data, hashType, isPool = false) {
+            const count = getDataPointsCount(hashType);
+            const filteredData = isPool ? 
+                data.filter(item => item.type === 'hashrate').slice(0, count) : 
+                data.slice(0, count);
+            
+            let hashrateField;
+            switch(hashType) {
+                case '1m': hashrateField = 'hashrate1m'; break;
+                case '5m': hashrateField = 'hashrate5m'; break;
+                case '1h': hashrateField = 'hashrate1hr'; break;
+                case '1d': hashrateField = 'hashrate1d'; break;
+                case '7d': hashrateField = 'hashrate7d'; break;
+                default: hashrateField = 'hashrate1hr';
+            }
+            
+            return {
+                labels: filteredData.map(item => {
+                    const date = new Date(item.timestamp);
+                    if (hashType === '1d' || hashType === '7d') {
+                        return date.toLocaleDateString();
+                    } else {
+                        return date.toLocaleTimeString();
                     }
+                }).reverse(),
+                values: filteredData.map(item => parseHashrate(item[hashrateField])).reverse()
+            };
+        }
+
+        // Fonction pour basculer l'affichage du hashrate utilisateur
+        function toggleHashrate(hashType, button) {
+            // Mettre à jour les boutons actifs
+            document.querySelectorAll('#charts .chart-controls .hash-button').forEach(btn => {
+                if (btn.parentElement === button.parentElement) {
+                    btn.classList.remove('active');
                 }
             });
+            button.classList.add('active');
+            
+            currentUserHashType = hashType;
+            updateUserChart();
+        }
 
-            // Préparation des données pool (hashrate)
-            const poolHashrateData = poolData.filter(item => item.type === 'hashrate').slice(0, 20);
-            const poolLabels = poolHashrateData.map(item => item.timestamp.split(' ')[1]).reverse();
-            const poolHashrate1m = poolHashrateData.map(item => parseHashrate(item.hashrate1m)).reverse();
-            const poolHashrate5m = poolHashrateData.map(item => parseHashrate(item.hashrate5m)).reverse();
-            const poolHashrate1h = poolHashrateData.map(item => parseHashrate(item.hashrate1hr)).reverse();
-            const poolHashrate1d = poolHashrateData.map(item => parseHashrate(item.hashrate1d)).reverse();
-            const poolHashrate7d = poolHashrateData.map(item => parseHashrate(item.hashrate7d)).reverse();
+        // Fonction pour basculer l'affichage du hashrate pool
+        function togglePoolHashrate(hashType, button) {
+            // Mettre à jour les boutons actifs
+            const poolSection = button.closest('.section');
+            poolSection.querySelectorAll('.hash-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            
+            currentPoolHashType = hashType;
+            updatePoolChart();
+        }
 
-            // Graphique pool
-            const poolCtx = document.getElementById('poolHashrateChart').getContext('2d');
-            new Chart(poolCtx, {
+        // Fonction pour mettre à jour le graphique utilisateur
+        function updateUserChart() {
+            if (userChart) {
+                userChart.destroy();
+            }
+            
+            const userData = {{.Users}};
+            const data = getHashrateData(userData, currentUserHashType);
+            const color = getColorForHashType(currentUserHashType);
+            
+            const userCtx = document.getElementById('userHashrateChart').getContext('2d');
+            userChart = new Chart(userCtx, {
                 type: 'line',
                 data: {
-                    labels: poolLabels,
-                    datasets: [
-                        {
-                            label: 'Hash 1m',
-                            data: poolHashrate1m,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 5m',
-                            data: poolHashrate5m,
-                            borderColor: 'rgb(54, 162, 235)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1h',
-                            data: poolHashrate1h,
-                            borderColor: 'rgb(255, 205, 86)',
-                            backgroundColor: 'rgba(255, 205, 86, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1d',
-                            data: poolHashrate1d,
-                            borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 7d',
-                            data: poolHashrate7d,
-                            borderColor: 'rgb(153, 102, 255)',
-                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                            tension: 0.1
-                        }
-                    ]
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Hash ' + currentUserHashType,
+                        data: data.values,
+                        borderColor: color.border,
+                        backgroundColor: color.background,
+                        tension: 0.1,
+                        fill: true
+                    }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Évolution du Hashrate Pool'
+                            text: 'Évolution du Hashrate Utilisateur - ' + getTimeRangeLabel(currentUserHashType)
                         },
                         legend: {
                             display: true,
@@ -563,9 +559,95 @@ const HTMLTemplate = `
             });
         }
 
+        // Fonction pour mettre à jour le graphique pool
+        function updatePoolChart() {
+            if (poolChart) {
+                poolChart.destroy();
+            }
+            
+            const poolData = {{.Pool}};
+            const data = getHashrateData(poolData, currentPoolHashType, true);
+            const color = getColorForHashType(currentPoolHashType);
+            
+            const poolCtx = document.getElementById('poolHashrateChart').getContext('2d');
+            poolChart = new Chart(poolCtx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Hash ' + currentPoolHashType,
+                        data: data.values,
+                        borderColor: color.border,
+                        backgroundColor: color.background,
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Évolution du Hashrate Pool - ' + getTimeRangeLabel(currentPoolHashType)
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Temps'
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Hashrate (H/s)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatHashrate(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fonction pour obtenir la couleur selon le type de hash
+        function getColorForHashType(hashType) {
+            const colors = {
+                '1m': { border: 'rgb(255, 99, 132)', background: 'rgba(255, 99, 132, 0.1)' },
+                '5m': { border: 'rgb(54, 162, 235)', background: 'rgba(54, 162, 235, 0.1)' },
+                '1h': { border: 'rgb(255, 205, 86)', background: 'rgba(255, 205, 86, 0.1)' },
+                '1d': { border: 'rgb(75, 192, 192)', background: 'rgba(75, 192, 192, 0.1)' },
+                '7d': { border: 'rgb(153, 102, 255)', background: 'rgba(153, 102, 255, 0.1)' }
+            };
+            return colors[hashType] || colors['1h'];
+        }
+
+        // Fonction pour obtenir le libellé de la plage de temps
+        function getTimeRangeLabel(hashType) {
+            const labels = {
+                '1m': 'Sur 2 heures',
+                '5m': 'Sur 6 heures',
+                '1h': 'Sur 12 heures',
+                '1d': 'Sur 30 jours',
+                '7d': 'Sur 6 mois'
+            };
+            return labels[hashType] || 'Sur 12 heures';
+        }
+
         // Initialiser les graphiques au chargement de la page
         document.addEventListener('DOMContentLoaded', function() {
-            initCharts();
+            updateUserChart();
+            updatePoolChart();
         });
 
         // Auto-refresh toutes les 30 secondes
@@ -576,3 +658,18 @@ const HTMLTemplate = `
 </body>
 </html>
 `
+
+	// Créer le template et l'exécuter
+	t, err := template.New("dashboard").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	err = t.Execute(w, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
