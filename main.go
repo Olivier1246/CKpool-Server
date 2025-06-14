@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -60,16 +59,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse et exécute le template HTML
-	tmpl, err := template.New("dashboard").Parse(HTMLTemplate)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Erreur lors du parsing du template: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, fmt.Sprintf("Erreur lors de l'exécution du template: %v", err), http.StatusInternalServerError)
+	// Génère et envoie le template HTML avec les données
+	if err := HTMLTemplate(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Erreur lors de la génération du template: %v", err), http.StatusInternalServerError)
 		return
 	}
 }
