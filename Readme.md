@@ -1,4 +1,4 @@
-go build -o ckpool-server main.go
+go build -o ckpool-server *.go
 
 ./ckpool-server
 
