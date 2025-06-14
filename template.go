@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-// HTMLTemplate contient le template HTML complet pour le dashboard
-const htmlTemplateContent = `
+// htmlTemplateString contient le template HTML complet pour le dashboard
+const htmlTemplateString = `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -582,13 +582,17 @@ const htmlTemplateContent = `
 </html>
 `
 
-// HTMLTemplate fonction pour générer le template HTML avec les données
-func HTMLTemplate(w http.ResponseWriter, data LogData) error {
-	tmpl, err := template.New("dashboard").Parse(htmlTemplateContent)
+// HTMLTemplate rend le template HTML avec les données fournies
+func HTMLTemplate(w http.ResponseWriter, data LogData) {
+	tmpl, err := template.New("dashboard").Parse(htmlTemplateString)
 	if err != nil {
-		return err
+		http.Error(w, "Erreur lors du parsing du template: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	return tmpl.Execute(w, data)
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Erreur lors de l'exécution du template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }

@@ -59,11 +59,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Génère et envoie le template HTML avec les données
-	if err := HTMLTemplate(w, data); err != nil {
-		http.Error(w, fmt.Sprintf("Erreur lors de la génération du template: %v", err), http.StatusInternalServerError)
-		return
-	}
+	// Correction: passer *data (déréférencement du pointeur) à HTMLTemplate
+	HTMLTemplate(w, *data)
 }
 
 func handleAPIData(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +73,7 @@ func handleAPIData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, fmt.Sprintf("Erreur lors de l'encodage JSON: %v", err), http.StatusInternalServerError)
+		http.Error(w, "Erreur lors de l'encodage JSON: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
