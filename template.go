@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-// htmlTemplateString contient le template HTML complet pour le dashboard
-const htmlTemplateString = `
+// HTMLTemplate contient le template HTML complet pour le dashboard
+const HTMLTemplate = `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -385,20 +385,70 @@ const htmlTemplateString = `
             return value.toString();
         }
 
+        // Fonction pour filtrer les données selon la période
+        function filterDataByPeriod(data, hashrateType) {
+            const now = new Date();
+            let filteredData = [];
+            
+            switch(hashrateType) {
+                case '1m':
+                    // Hash 1m : 2 dernières heures (120 points max)
+                    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const itemDate = new Date(item.timestamp);
+                        return itemDate >= twoHoursAgo;
+                    }).slice(-120);
+                    break;
+                case '5m':
+                    // Hash 5m : 6 dernières heures (72 points max)
+                    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const itemDate = new Date(item.timestamp);
+                        return itemDate >= sixHoursAgo;
+                    }).slice(-72);
+                    break;
+                case '1h':
+                    // Hash 1h : 12 dernières heures (12 points max)
+                    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const itemDate = new Date(item.timestamp);
+                        return itemDate >= twelveHoursAgo;
+                    }).slice(-12);
+                    break;
+                case '1d':
+                    // Hash 1d : 30 derniers jours (30 points max)
+                    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const itemDate = new Date(item.timestamp);
+                        return itemDate >= thirtyDaysAgo;
+                    }).slice(-30);
+                    break;
+                case '7d':
+                    // Hash 7d : 6 derniers mois (24 points max)
+                    const sixMonthsAgo = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const itemDate = new Date(item.timestamp);
+                        return itemDate >= sixMonthsAgo;
+                    }).slice(-24);
+                    break;
+                default:
+                    filteredData = data.slice(-12);
+            }
+            
+            return filteredData.reverse();
+        }
+
         // Initialisation des graphiques
         function initCharts() {
             const userData = {{.Users}};
             const poolData = {{.Pool}};
 
-            // Préparation des données utilisateur
-            const userLabels = userData.slice(0, 20).map(item => item.timestamp.split(' ')[1]).reverse();
-            const userHashrate1m = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1m)).reverse();
-            const userHashrate5m = userData.slice(0, 20).map(item => parseHashrate(item.hashrate5m)).reverse();
-            const userHashrate1h = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1hr)).reverse();
-            const userHashrate1d = userData.slice(0, 20).map(item => parseHashrate(item.hashrate1d)).reverse();
-            const userHashrate7d = userData.slice(0, 20).map(item => parseHashrate(item.hashrate7d)).reverse();
+            // Filtrer les données pour Hash 1h (par défaut)
+            const filteredUserData = filterDataByPeriod(userData, '1h');
+            const userLabels = filteredUserData.map(item => item.timestamp.split(' ')[1]);
+            const userHashrate1h = filteredUserData.map(item => parseHashrate(item.hashrate1hr));
 
-            // Graphique utilisateur
+            // Graphique utilisateur - affichage uniquement Hash 1h par défaut
             const userCtx = document.getElementById('userHashrateChart').getContext('2d');
             new Chart(userCtx, {
                 type: 'line',
@@ -406,39 +456,12 @@ const htmlTemplateString = `
                     labels: userLabels,
                     datasets: [
                         {
-                            label: 'Hash 1m',
-                            data: userHashrate1m,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 5m',
-                            data: userHashrate5m,
-                            borderColor: 'rgb(54, 162, 235)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            tension: 0.1
-                        },
-                        {
                             label: 'Hash 1h',
                             data: userHashrate1h,
                             borderColor: 'rgb(255, 205, 86)',
                             backgroundColor: 'rgba(255, 205, 86, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1d',
-                            data: userHashrate1d,
-                            borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 7d',
-                            data: userHashrate7d,
-                            borderColor: 'rgb(153, 102, 255)',
-                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                            tension: 0.1
+                            tension: 0.1,
+                            hidden: false
                         }
                     ]
                 },
@@ -447,11 +470,48 @@ const htmlTemplateString = `
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Évolution du Hashrate Utilisateur'
+                            text: 'Évolution du Hashrate Utilisateur (12 dernières heures)'
                         },
                         legend: {
                             display: true,
-                            position: 'top'
+                            position: 'top',
+                            onClick: function(e, legendItem) {
+                                // Personnaliser le comportement du clic sur la légende
+                                const chart = this.chart;
+                                const dataset = chart.data.datasets[legendItem.datasetIndex];
+                                const hashrateType = legendItem.text.includes('1m') ? '1m' :
+                                                   legendItem.text.includes('5m') ? '5m' :
+                                                   legendItem.text.includes('1h') ? '1h' :
+                                                   legendItem.text.includes('1d') ? '1d' : '7d';
+                                
+                                // Filtrer et mettre à jour les données
+                                const newData = filterDataByPeriod(userData, hashrateType);
+                                chart.data.labels = newData.map(item => item.timestamp.split(' ')[1]);
+                                
+                                // Mettre à jour le titre selon le type
+                                let titleText = 'Évolution du Hashrate Utilisateur';
+                                switch(hashrateType) {
+                                    case '1m': titleText += ' (2 dernières heures)'; break;
+                                    case '5m': titleText += ' (6 dernières heures)'; break;
+                                    case '1h': titleText += ' (12 dernières heures)'; break;
+                                    case '1d': titleText += ' (30 derniers jours)'; break;
+                                    case '7d': titleText += ' (6 derniers mois)'; break;
+                                }
+                                chart.options.plugins.title.text = titleText;
+                                
+                                // Masquer tous les datasets
+                                chart.data.datasets.forEach(ds => ds.hidden = true);
+                                
+                                // Afficher seulement le dataset sélectionné avec les nouvelles données
+                                const fieldName = hashrateType === '1h' ? 'hashrate1hr' : 
+                                                hashrateType === '1d' ? 'hashrate1d' :
+                                                hashrateType === '7d' ? 'hashrate7d' :
+                                                'hashrate' + hashrateType;
+                                dataset.data = newData.map(item => parseHashrate(item[fieldName]));
+                                dataset.hidden = false;
+                                
+                                chart.update();
+                            }
                         }
                     },
                     scales: {
@@ -478,16 +538,13 @@ const htmlTemplateString = `
                 }
             });
 
-            // Préparation des données pool (hashrate)
-            const poolHashrateData = poolData.filter(item => item.type === 'hashrate').slice(0, 20);
-            const poolLabels = poolHashrateData.map(item => item.timestamp.split(' ')[1]).reverse();
-            const poolHashrate1m = poolHashrateData.map(item => parseHashrate(item.hashrate1m)).reverse();
-            const poolHashrate5m = poolHashrateData.map(item => parseHashrate(item.hashrate5m)).reverse();
-            const poolHashrate1h = poolHashrateData.map(item => parseHashrate(item.hashrate1hr)).reverse();
-            const poolHashrate1d = poolHashrateData.map(item => parseHashrate(item.hashrate1d)).reverse();
-            const poolHashrate7d = poolHashrateData.map(item => parseHashrate(item.hashrate7d)).reverse();
+            // Préparation des données pool (hashrate) - Hash 1h par défaut
+            const poolHashrateData = poolData.filter(item => item.type === 'hashrate');
+            const filteredPoolData = filterDataByPeriod(poolHashrateData, '1h');
+            const poolLabels = filteredPoolData.map(item => item.timestamp.split(' ')[1]);
+            const poolHashrate1h = filteredPoolData.map(item => parseHashrate(item.hashrate1hr));
 
-            // Graphique pool
+            // Graphique pool - affichage uniquement Hash 1h par défaut
             const poolCtx = document.getElementById('poolHashrateChart').getContext('2d');
             new Chart(poolCtx, {
                 type: 'line',
@@ -495,39 +552,12 @@ const htmlTemplateString = `
                     labels: poolLabels,
                     datasets: [
                         {
-                            label: 'Hash 1m',
-                            data: poolHashrate1m,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 5m',
-                            data: poolHashrate5m,
-                            borderColor: 'rgb(54, 162, 235)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            tension: 0.1
-                        },
-                        {
                             label: 'Hash 1h',
                             data: poolHashrate1h,
                             borderColor: 'rgb(255, 205, 86)',
                             backgroundColor: 'rgba(255, 205, 86, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 1d',
-                            data: poolHashrate1d,
-                            borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Hash 7d',
-                            data: poolHashrate7d,
-                            borderColor: 'rgb(153, 102, 255)',
-                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                            tension: 0.1
+                            tension: 0.1,
+                            hidden: false
                         }
                     ]
                 },
@@ -536,11 +566,44 @@ const htmlTemplateString = `
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Évolution du Hashrate Pool'
+                            text: 'Évolution du Hashrate Pool (12 dernières heures)'
                         },
                         legend: {
                             display: true,
-                            position: 'top'
+                            position: 'top',
+                            onClick: function(e, legendItem) {
+                                // Même logique pour le graphique pool
+                                const chart = this.chart;
+                                const dataset = chart.data.datasets[legendItem.datasetIndex];
+                                const hashrateType = legendItem.text.includes('1m') ? '1m' :
+                                                   legendItem.text.includes('5m') ? '5m' :
+                                                   legendItem.text.includes('1h') ? '1h' :
+                                                   legendItem.text.includes('1d') ? '1d' : '7d';
+                                
+                                const newData = filterDataByPeriod(poolHashrateData, hashrateType);
+                                chart.data.labels = newData.map(item => item.timestamp.split(' ')[1]);
+                                
+                                let titleText = 'Évolution du Hashrate Pool';
+                                switch(hashrateType) {
+                                    case '1m': titleText += ' (2 dernières heures)'; break;
+                                    case '5m': titleText += ' (6 dernières heures)'; break;
+                                    case '1h': titleText += ' (12 dernières heures)'; break;
+                                    case '1d': titleText += ' (30 derniers jours)'; break;
+                                    case '7d': titleText += ' (6 derniers mois)'; break;
+                                }
+                                chart.options.plugins.title.text = titleText;
+                                
+                                chart.data.datasets.forEach(ds => ds.hidden = true);
+                                
+                                const fieldName = hashrateType === '1h' ? 'hashrate1hr' : 
+                                                hashrateType === '1d' ? 'hashrate1d' :
+                                                hashrateType === '7d' ? 'hashrate7d' :
+                                                'hashrate' + hashrateType;
+                                dataset.data = newData.map(item => parseHashrate(item[fieldName]));
+                                dataset.hidden = false;
+                                
+                                chart.update();
+                            }
                         }
                     },
                     scales: {
@@ -566,6 +629,85 @@ const htmlTemplateString = `
                     }
                 }
             });
+
+            // Ajouter les autres datasets cachés pour permettre la commutation
+            const userChart = Chart.getChart('userHashrateChart');
+            const poolChart = Chart.getChart('poolHashrateChart');
+
+            // Ajouter tous les datasets pour l'utilisateur
+            userChart.data.datasets.push(
+                {
+                    label: 'Hash 1m',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 5m',
+                    data: [],
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 1d',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 7d',
+                    data: [],
+                    borderColor: 'rgb(153, 102, 255)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                }
+            );
+
+            // Ajouter tous les datasets pour le pool
+            poolChart.data.datasets.push(
+                {
+                    label: 'Hash 1m',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 5m',
+                    data: [],
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 1d',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                },
+                {
+                    label: 'Hash 7d',
+                    data: [],
+                    borderColor: 'rgb(153, 102, 255)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                    tension: 0.1,
+                    hidden: true
+                }
+            );
+
+            userChart.update();
+            poolChart.update();
         }
 
         // Initialiser les graphiques au chargement de la page
